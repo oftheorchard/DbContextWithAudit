@@ -10,7 +10,17 @@ public static class DbContextOptionsBuilderExtensions
     /// </summary>
     public static DbContextOptionsBuilder AddAuditInterceptor(this DbContextOptionsBuilder builder)
     {
-        builder.AddInterceptors(new AuditSaveChangesInterceptor());
+        return builder.AddAuditInterceptor(new AuditInterceptorOptions());
+    }
+
+    public static DbContextOptionsBuilder AddAuditInterceptor(this DbContextOptionsBuilder builder, int maxRowsPerBatch, int maxParametersPerCommand)
+    {
+        return builder.AddAuditInterceptor(new AuditInterceptorOptions { MaxRowsPerBatch = maxRowsPerBatch, MaxParametersPerCommand = maxParametersPerCommand });
+    }
+
+    public static DbContextOptionsBuilder AddAuditInterceptor(this DbContextOptionsBuilder builder, AuditInterceptorOptions options)
+    {
+        builder.AddInterceptors(new AuditSaveChangesInterceptor(options.MaxRowsPerBatch, options.MaxParametersPerCommand));
         return builder;
     }
 }
