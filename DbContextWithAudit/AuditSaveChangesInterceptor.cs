@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using System.Data.Common;
-using System.Linq;
 
 namespace DbContextWithAudit;
 
@@ -32,34 +31,7 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
     private sealed record AuditEntry(string AuditTableName, Dictionary<string, object?> ColumnValues);
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
-    {
-        var context = eventData.Context;
-        if (context == null)
-            return base.SavingChanges(eventData, result);
-
-        var entries = CollectAuditEntries(context);
-        if (entries.Count == 0)
-            return base.SavingChanges(eventData, result);
-
-        _pending[context] = entries;
-        // Ensure the audit inserts will be performed inside the same transaction as SaveChanges.
-        // If there's no ambient transaction, create one now and remember to commit it later.
-        if (context.Database.CurrentTransaction == null && !_createdTransactions.ContainsKey(context))
-        {
-            var tx = context.Database.BeginTransaction();
-            _createdTransactions[context] = tx;
-        }
-
-        // Persist audit rows now so they are included in the transaction we just created (or existing one).
-        if (_pending.TryGetValue(context, out List<AuditEntry>? value))
-        {
-            var dbTx = _createdTransactions.TryGetValue(context, out var created) ? created.GetDbTransaction() : context.Database.CurrentTransaction?.GetDbTransaction();
-            _logger.LogDebug("Persisting {Count} pending audit entries for context {ContextType} inside transaction.", value.Count, context.GetType().Name);
-            PersistPendingAudits(context, dbTx).GetAwaiter().GetResult();
-        }
-
-        return base.SavingChanges(eventData, result);
-    }
+        => SavingChangesAsync(eventData, result).Result;
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
         InterceptionResult<int> result, CancellationToken cancellationToken = default)
@@ -107,33 +79,7 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
     }
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
-    {
-        var context = eventData.Context;
-        // If we created a transaction earlier, commit and dispose it now.
-        if (context != null && _createdTransactions.TryRemove(context, out var tx))
-        {
-            try
-            {
-                tx.Commit();
-                _logger.LogDebug("Committed created transaction for DbContext {ContextType}.", context.GetType().Name);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error committing created transaction for DbContext {ContextType}.", context.GetType().Name);
-                throw;
-            }
-            finally
-            {
-                tx.Dispose();
-            }
-        }
-
-        // cleanup pending audits for this context
-        if (context != null)
-            _pending.TryRemove(context, out _);
-
-        return base.SavedChanges(eventData, result);
-    }
+        => SavedChangesAsync(eventData, result).Result;
 
     public override async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result,
         CancellationToken cancellationToken = default)
@@ -216,6 +162,7 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
 
     private static List<AuditEntry> CollectAuditEntries(DbContext context)
     {
+
         return [.. context.ChangeTracker.Entries()
             .Where(IsAuditableEntry)
             .Select(CreateAuditEntry)
@@ -245,9 +192,7 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
     }
 
     private static string GetColumnName(PropertyEntry property, StoreObjectIdentifier storeObject)
-    {
-        return property.Metadata.GetColumnName(storeObject) ?? property.Metadata.Name;
-    }
+        => property.Metadata.GetColumnName(storeObject) ?? property.Metadata.Name;
 
     private static string? GetTableName(IEntityType entityType)
     {
