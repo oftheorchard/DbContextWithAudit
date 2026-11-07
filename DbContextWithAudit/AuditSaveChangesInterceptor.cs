@@ -23,7 +23,7 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
     private readonly AuditDataPersister _auditDataPersister = new(maxRowsPerBatch, maxParametersPerCommand, logger);
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
-        => SavingChangesAsync(eventData, result).ConfigureAwait(false).GetAwaiter().GetResult();
+        => SavingChangesAsync(eventData, result).AsTask().GetAwaiter().GetResult();
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
         InterceptionResult<int> result, CancellationToken cancellationToken = default)
@@ -36,27 +36,25 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
                 return base.SavingChangesAsync(eventData, result, cancellationToken);
 
             _pending[context] = entries;
-        }
 
-        if (context != null)
-        {
             if (context.Database.CurrentTransaction == null && !_createdTransactions.ContainsKey(context))
             {
                 var tx = context.Database.BeginTransactionAsync(cancellationToken).GetAwaiter().GetResult();
                 _createdTransactions[context] = tx;
             }
 
-            if (_pending.ContainsKey(context))
-            {
-                // persist within the transaction (existing or created)
-                return PersistPendingAndReturn(eventData, result, cancellationToken);
-            }
+            // persist within the transaction (existing or created)
+            // return PersistPendingAndReturn(eventData, result, cancellationToken);
+            PersistPendingAndReturn(eventData, result, cancellationToken)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private async ValueTask<InterceptionResult<int>> PersistPendingAndReturn(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken)
+    //private async ValueTask<InterceptionResult<int>> PersistPendingAndReturn(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken)
+    private async Task<int> PersistPendingAndReturn(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken)
+    //private async Task PersistPendingAndReturn(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken)
     {
         var context = eventData.Context!;
         DbTransaction? dbTx = null;
@@ -66,12 +64,15 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
             dbTx = context.Database.CurrentTransaction.GetDbTransaction();
 
         _logger.LogDebug("Persisting pending audit entries for context {ContextType} in async saving flow.", context.GetType().Name);
-        await PersistPendingAudits(context, dbTx).ConfigureAwait(false);
-        return await base.SavingChangesAsync(eventData, result, cancellationToken).ConfigureAwait(false);
+        if (_pending.TryRemove(context, out var audits) && audits.Count > 0)
+            await _auditDataPersister.PersistAsync(context, audits, dbTx).ConfigureAwait(false);
+
+        return 1;
+         //return await base.SavingChangesAsync(eventData, result, cancellationToken).ConfigureAwait(false);
     }
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
-        => SavedChangesAsync(eventData, result).ConfigureAwait(false).GetAwaiter().GetResult();
+        => SavedChangesAsync(eventData, result).AsTask().GetAwaiter().GetResult();
 
     public override async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result,
         CancellationToken cancellationToken = default)
@@ -129,11 +130,4 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
         return base.SaveChangesFailedAsync(eventData, cancellationToken);
     }
 
-    private async Task PersistPendingAudits(DbContext context, DbTransaction? dbTransaction)
-    {
-        if (!_pending.TryRemove(context, out var audits) || audits == null || audits.Count == 0)
-            return;
-
-        await _auditDataPersister.PersistAsync(context, audits, dbTransaction).ConfigureAwait(false);
-    }
 }
