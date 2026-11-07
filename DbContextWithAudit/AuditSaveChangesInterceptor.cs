@@ -1,12 +1,14 @@
-using System.Collections.Concurrent;
-using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.EntityFrameworkCore.Storage;
+using System.Collections.Concurrent;
+using System.Data.Common;
+using System.Linq;
 
 namespace DbContextWithAudit;
 
@@ -15,26 +17,19 @@ namespace DbContextWithAudit;
 /// into audit tables named with the prefix "LOG_" + original table name.
 /// The interceptor works generically for all mapped entity types.
 /// </summary>
-public class AuditSaveChangesInterceptor : SaveChangesInterceptor
+public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParametersPerCommand = -1, ILogger<AuditSaveChangesInterceptor>? logger = null) : SaveChangesInterceptor
 {
     private readonly ConcurrentDictionary<DbContext, List<AuditEntry>> _pending = new();
     // Tracks transactions we created so we can commit/rollback them after SaveChanges completes
     private readonly ConcurrentDictionary<DbContext, IDbContextTransaction> _createdTransactions = new();
     // Maximum number of rows to include in a single batched INSERT statement
-    private readonly int _maxRowsPerBatch;
+    private readonly int _maxRowsPerBatch = Math.Max(1, maxRowsPerBatch);
     // Maximum number of parameters allowed per command; if <= 0 the interceptor will auto-detect per-provider limits
-    private readonly int _maxParametersPerCommand;
-    private readonly ILogger<AuditSaveChangesInterceptor> _logger;
+    private readonly int _maxParametersPerCommand = maxParametersPerCommand < 64 ? -1 : maxParametersPerCommand;
+    private readonly ILogger<AuditSaveChangesInterceptor> _logger = logger ?? NullLogger<AuditSaveChangesInterceptor>.Instance;
     private const int SqlServerParameterLimit = 2100;
 
-    private record AuditEntry(string AuditTableName, Dictionary<string, object?> ColumnValues);
-
-    public AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParametersPerCommand = -1, ILogger<AuditSaveChangesInterceptor>? logger = null)
-    {
-        _maxRowsPerBatch = Math.Max(1, maxRowsPerBatch);
-        _maxParametersPerCommand = maxParametersPerCommand < 64 ? -1 : maxParametersPerCommand; // allow auto-detect when < 64
-        _logger = logger ?? NullLogger<AuditSaveChangesInterceptor>.Instance;
-    }
+    private sealed record AuditEntry(string AuditTableName, Dictionary<string, object?> ColumnValues);
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -56,14 +51,10 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         }
 
         // Persist audit rows now so they are included in the transaction we just created (or existing one).
-        if (_pending.ContainsKey(context))
+        if (_pending.TryGetValue(context, out List<AuditEntry>? value))
         {
             var dbTx = _createdTransactions.TryGetValue(context, out var created) ? created.GetDbTransaction() : context.Database.CurrentTransaction?.GetDbTransaction();
-            try
-            {
-                _logger.LogDebug("Persisting {Count} pending audit entries for context {ContextType} inside transaction.", _pending[context].Count, context.GetType().Name);
-            }
-            catch { }
+            _logger.LogDebug("Persisting {Count} pending audit entries for context {ContextType} inside transaction.", value.Count, context.GetType().Name);
             PersistPendingAudits(context, dbTx).GetAwaiter().GetResult();
         }
 
@@ -110,11 +101,7 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         else if (context.Database.CurrentTransaction != null)
             dbTx = context.Database.CurrentTransaction.GetDbTransaction();
 
-        try
-        {
-            _logger.LogDebug("Persisting pending audit entries for context {ContextType} in async saving flow.", context.GetType().Name);
-        }
-        catch { }
+        _logger.LogDebug("Persisting pending audit entries for context {ContextType} in async saving flow.", context.GetType().Name);
         await PersistPendingAudits(context, dbTx).ConfigureAwait(false);
         return await base.SavingChangesAsync(eventData, result, cancellationToken).ConfigureAwait(false);
     }
@@ -132,7 +119,7 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to commit created transaction for DbContext {ContextType}.", context.GetType().Name);
+                _logger.LogError(ex, "Error committing created transaction for DbContext {ContextType}.", context.GetType().Name);
                 throw;
             }
             finally
@@ -161,7 +148,7 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to commit created transaction for DbContext {ContextType} (async).", context.GetType().Name);
+                _logger.LogError(ex, "Error committing created transaction for DbContext {ContextType} (async).", context.GetType().Name);
                 throw;
             }
             finally
@@ -178,6 +165,8 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData)
     {
+        _logger.LogError(eventData.Exception, "SaveChanges failed for DbContext {ContextType}.", eventData.Context?.GetType().Name);
+
         // cleanup pending on failure
         if (eventData.Context != null)
         {
@@ -202,6 +191,8 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
     public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
     {
+        _logger.LogError(eventData.Exception, "SaveChanges failed for DbContext {ContextType} (async).", eventData.Context?.GetType().Name);
+
         if (eventData.Context != null)
         {
             _pending.TryRemove(eventData.Context, out _);
@@ -223,48 +214,39 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         return base.SaveChangesFailedAsync(eventData, cancellationToken);
     }
 
-    private List<AuditEntry> CollectAuditEntries(DbContext context)
+    private static List<AuditEntry> CollectAuditEntries(DbContext context)
     {
-        var list = new List<AuditEntry>();
+        return [.. context.ChangeTracker.Entries()
+            .Where(IsAuditableEntry)
+            .Select(CreateAuditEntry)
+            .OfType<AuditEntry>()];
+    }
 
-        var entries = context.ChangeTracker.Entries()
-            .Where(e => e.State == EntityState.Modified || e.State == EntityState.Deleted);
+    private static bool IsAuditableEntry(EntityEntry entry) =>
+        entry.State is EntityState.Modified or EntityState.Deleted;
 
-        var model = context.Model;
+    private static AuditEntry? CreateAuditEntry(EntityEntry entry)
+    {
+        var entityType = entry.Metadata;
+        var tableName = GetTableName(entityType);
+        return string.IsNullOrEmpty(tableName)
+            ? null
+            : new AuditEntry("LOG_" + tableName, GetOriginalColumnValues(entry, tableName));
+    }
 
-        foreach (var entry in entries)
-        {
-            // Get the relational table name for the entity type
-            var entityType = entry.Metadata;
-            var tableName = GetTableName(entityType);
-            if (string.IsNullOrEmpty(tableName))
-                continue;
+    private static Dictionary<string, object?> GetOriginalColumnValues(EntityEntry entry, string tableName)
+    {
+        var storeObject = StoreObjectIdentifier.Table(tableName, entry.Metadata.GetSchema());
+        return entry.Properties
+            .Where(property => property.Metadata.IsPrimaryKey() || !property.Metadata.IsShadowProperty())
+            .ToDictionary(
+                property => GetColumnName(property, storeObject),
+                property => property.OriginalValue);
+    }
 
-            var auditTableName = "LOG_" + tableName;
-
-            var columnValues = new Dictionary<string, object?>();
-
-            foreach (var property in entry.Properties)
-            {
-                // capture original value (previous version)
-                if (!property.Metadata.IsPrimaryKey() && property.Metadata.IsShadowProperty())
-                    continue; // skip shadow properties
-
-                var columnName = property.Metadata.GetColumnName(StoreObjectIdentifier.Table(entityType.GetTableName(), entityType.GetSchema()));
-                if (string.IsNullOrEmpty(columnName))
-                    columnName = property.Metadata.Name;
-
-                object? value = null;
-                if (entry.State == EntityState.Deleted || entry.State == EntityState.Modified)
-                    value = property.OriginalValue;
-
-                columnValues[columnName] = value;
-            }
-
-            list.Add(new AuditEntry(auditTableName, columnValues));
-        }
-
-        return list;
+    private static string GetColumnName(PropertyEntry property, StoreObjectIdentifier storeObject)
+    {
+        return property.Metadata.GetColumnName(storeObject) ?? property.Metadata.Name;
     }
 
     private static string? GetTableName(IEntityType entityType)
@@ -287,105 +269,124 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         var closeAfter = false;
         try
         {
-            if (connection.State != System.Data.ConnectionState.Open)
-            {
-                await connection.OpenAsync();
-                closeAfter = true;
-            }
+            closeAfter = await OpenConnectionIfNeededAsync(connection);
 
-            // Group audit entries by audit table name and execute batched inserts per table
-            var groups = audits.GroupBy(a => a.AuditTableName);
-            foreach (var group in groups)
-            {
-                try
-                {
-                    var entries = group.ToList();
-                    // Determine ordered union of columns across all entries
-                    var columnOrder = new List<string>();
-                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var e in entries)
-                    {
-                        foreach (var col in e.ColumnValues.Keys)
-                        {
-                            if (seen.Add(col))
-                                columnOrder.Add(col);
-                        }
-                    }
-
-                    if (columnOrder.Count == 0)
-                    {
-                        try { _logger.LogDebug("No columns determined for audit table {AuditTable}, skipping.", group.Key); } catch { }
-                        continue;
-                    }
-
-                    // Determine maximum rows per batch considering provider parameter limits
-                    var cols = string.Join(", ", columnOrder.Select(c => "[" + c + "]"));
-                    int columnsCount = columnOrder.Count;
-                    int effectiveMaxParams = _maxParametersPerCommand > 0
-                        ? _maxParametersPerCommand
-                        : (context.Database.ProviderName != null && context.Database.ProviderName.Contains("SqlServer", StringComparison.OrdinalIgnoreCase)
-                            ? SqlServerParameterLimit
-                            : 2000);
-
-                    int maxRowsByParams = columnsCount > 0 ? Math.Max(1, effectiveMaxParams / columnsCount) : _maxRowsPerBatch;
-                    int batchSize = Math.Max(1, Math.Min(_maxRowsPerBatch, maxRowsByParams));
-
-                    _logger.LogDebug("EffectiveMaxParams={EffectiveMaxParams}, batchSize={BatchSize} for audit table {AuditTable}", effectiveMaxParams, batchSize, group.Key);
-
-                    for (int offset = 0; offset < entries.Count; offset += batchSize)
-                    {
-                        var batch = entries.Skip(offset).Take(batchSize).ToList();
-                        try
-                        {
-                            using var cmd = connection.CreateCommand();
-                            if (dbTransaction != null)
-                                cmd.Transaction = dbTransaction;
-
-                            var valueRows = new List<string>();
-                            int rowIndex = 0;
-                            foreach (var entry in batch)
-                            {
-                                var paramNames = new List<string>();
-                                for (int ci = 0; ci < columnOrder.Count; ci++)
-                                {
-                                    var paramName = "@p" + rowIndex + "_" + ci;
-                                    paramNames.Add(paramName);
-
-                                    var param = cmd.CreateParameter();
-                                    param.ParameterName = paramName;
-                                    if (entry.ColumnValues.TryGetValue(columnOrder[ci], out var val))
-                                        param.Value = val ?? DBNull.Value;
-                                    else
-                                        param.Value = DBNull.Value;
-
-                                    cmd.Parameters.Add(param);
-                                }
-
-                                valueRows.Add("(" + string.Join(", ", paramNames) + ")");
-                                rowIndex++;
-                            }
-
-                            cmd.CommandText = $"INSERT INTO {group.Key} ({cols}) VALUES {string.Join(", ", valueRows)};";
-                            await cmd.ExecuteNonQueryAsync();
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Failed to insert audit batch into {AuditTable}. BatchSize={BatchSize}. The transaction will be rolled back.", group.Key, batch.Count);
-                            throw;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to process audit group {AuditTable}. The transaction will be rolled back.", group.Key);
-                    throw;
-                }
-            }
+            foreach (var group in audits.GroupBy(a => a.AuditTableName))
+                await PersistAuditGroupAsync(context, connection, dbTransaction, group).ConfigureAwait(false);
         }
         finally
         {
             if (closeAfter)
                 await connection.CloseAsync();
         }
+    }
+
+    private static async Task<bool> OpenConnectionIfNeededAsync(DbConnection connection)
+    {
+        if (connection.State == System.Data.ConnectionState.Open)
+            return false;
+
+        await connection.OpenAsync().ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task PersistAuditGroupAsync(
+        DbContext context,
+        DbConnection connection,
+        DbTransaction? dbTransaction,
+        IGrouping<string, AuditEntry> group)
+    {
+        var entries = group.ToList();
+        var columnOrder = GetColumnOrder(entries);
+        if (columnOrder.Count == 0)
+        {
+            _logger.LogDebug("No columns determined for audit table {AuditTable}, skipping.", group.Key);
+            return;
+        }
+
+        var batchSize = GetBatchSize(context, columnOrder.Count);
+        var sqlGenerationHelper = context.GetService<ISqlGenerationHelper>();
+        _logger.LogDebug("EffectiveMaxParams={EffectiveMaxParams}, batchSize={BatchSize} for audit table {AuditTable}",
+            GetEffectiveMaxParameters(context), batchSize, group.Key);
+
+        for (var offset = 0; offset < entries.Count; offset += batchSize)
+        {
+            var batch = entries.Skip(offset).Take(batchSize).ToList();
+            await ExecuteAuditBatchAsync(connection, dbTransaction, sqlGenerationHelper, group.Key, columnOrder, batch).ConfigureAwait(false);
+        }
+    }
+
+    private static List<string> GetColumnOrder(IReadOnlyCollection<AuditEntry> entries)
+    {
+        var columns = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in entries)
+        {
+            columns.AddRange(from column in entry.ColumnValues.Keys
+                             where seen.Add(column)
+                             select column);
+        }
+
+        return columns;
+    }
+
+    private int GetBatchSize(DbContext context, int columnCount)
+    {
+        var maxRowsByParameters = Math.Max(1, GetEffectiveMaxParameters(context) / columnCount);
+        return Math.Max(1, Math.Min(_maxRowsPerBatch, maxRowsByParameters));
+    }
+
+    private int GetEffectiveMaxParameters(DbContext context)
+    {
+        if (_maxParametersPerCommand > 0)
+            return _maxParametersPerCommand;
+
+        return context.Database.ProviderName?.Contains("SqlServer", StringComparison.OrdinalIgnoreCase) == true
+            ? SqlServerParameterLimit
+            : 2000;
+    }
+
+    private static async Task ExecuteAuditBatchAsync(
+        DbConnection connection,
+        DbTransaction? dbTransaction,
+        ISqlGenerationHelper sqlGenerationHelper,
+        string auditTableName,
+        IReadOnlyList<string> columnOrder,
+        IReadOnlyList<AuditEntry> batch)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = dbTransaction;
+
+        var valueRows = new List<string>(batch.Count);
+        for (var rowIndex = 0; rowIndex < batch.Count; rowIndex++)
+            valueRows.Add(CreateParameterRow(command, batch[rowIndex], columnOrder, rowIndex));
+
+        var tableIdentifier = sqlGenerationHelper.DelimitIdentifier(auditTableName);
+        var columns = string.Join(", ", columnOrder.Select(sqlGenerationHelper.DelimitIdentifier));
+        command.CommandText = $"INSERT INTO {tableIdentifier} ({columns}) VALUES {string.Join(", ", valueRows)};";
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+    }
+
+    private static string CreateParameterRow(
+        DbCommand command,
+        AuditEntry entry,
+        IReadOnlyList<string> columnOrder,
+        int rowIndex)
+    {
+        var parameterNames = new List<string>(columnOrder.Count);
+        for (var columnIndex = 0; columnIndex < columnOrder.Count; columnIndex++)
+        {
+            var parameterName = $"@p{rowIndex}_{columnIndex}";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = parameterName;
+            parameter.Value = entry.ColumnValues.TryGetValue(columnOrder[columnIndex], out var value)
+                ? value ?? DBNull.Value
+                : DBNull.Value;
+            command.Parameters.Add(parameter);
+            parameterNames.Add(parameterName);
+        }
+
+        return $"({string.Join(", ", parameterNames)})";
     }
 }

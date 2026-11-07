@@ -1,4 +1,4 @@
-using DbContextWithAudit;
+using DbContextWithAudit.Tests.Model;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -28,13 +28,13 @@ public sealed class AuditSaveChangesInterceptorTests : IAsyncLifetime
     {
         var product = new Product { Name = "Original", Price = 10m };
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         product.Name = "Updated";
         product.Price = 20m;
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var audit = await _context.ProductLogs.SingleAsync();
+        var audit = await _context.ProductLogs.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(product.Id, audit.Id);
         Assert.Equal("Original", audit.Name);
         Assert.Equal(10m, audit.Price);
@@ -45,44 +45,44 @@ public sealed class AuditSaveChangesInterceptorTests : IAsyncLifetime
     {
         var product = new Product { Name = "To delete", Price = 15m };
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         _context.Products.Remove(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var audit = await _context.ProductLogs.SingleAsync();
+        var audit = await _context.ProductLogs.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(product.Id, audit.Id);
         Assert.Equal("To delete", audit.Name);
         Assert.Equal(15m, audit.Price);
-        Assert.Empty(await _context.Products.ToListAsync());
+        Assert.Empty(await _context.Products.ToListAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Multiple_modified_entities_are_inserted_into_the_audit_table_in_batches()
     {
         await using var context = CreateContext(maxRowsPerBatch: 2);
-        await context.Database.EnsureCreatedAsync();
+        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
 
         var products = Enumerable.Range(1, 5)
             .Select(i => new Product { Name = $"Original {i}", Price = i })
             .ToList();
 
         context.Products.AddRange(products);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         foreach (var product in products)
             product.Name += " updated";
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var audits = await context.ProductLogs
             .OrderBy(x => x.Id)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(5, audits.Count);
         Assert.Equal(
-            new[] { "Original 1", "Original 2", "Original 3", "Original 4", "Original 5" },
-            audits.Select(x => x.Name).ToArray());
+            [ "Original 1", "Original 2", "Original 3", "Original 4", "Original 5" ],
+            [.. audits.Select(x => x.Name)]);
     }
 
     [Fact]
@@ -90,15 +90,15 @@ public sealed class AuditSaveChangesInterceptorTests : IAsyncLifetime
     {
         var product = new Product { Name = "Original", Price = 10m };
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await _context.Database.ExecuteSqlRawAsync("DROP TABLE [LOG_Products]");
+        await _context.Database.ExecuteSqlRawAsync("DROP TABLE [LOG_Products]", TestContext.Current.CancellationToken);
         product.Name = "Updated";
 
-        await Assert.ThrowsAsync<SqliteException>(() => _context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SqliteException>(() => _context.SaveChangesAsync(TestContext.Current.CancellationToken));
 
         await using var verificationContext = CreateContext();
-        var persistedProduct = await verificationContext.Products.SingleAsync();
+        var persistedProduct = await verificationContext.Products.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("Original", persistedProduct.Name);
     }
 
@@ -118,26 +118,26 @@ public sealed class AuditSaveChangesInterceptorTests : IAsyncLifetime
         };
 
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         product.Name = "Updated product";
         product.Profile.Description = "Updated description";
         product.Tags[0].Value = "Updated first tag";
         product.Tags.RemoveAt(1);
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var productAudit = await _context.ProductLogs.SingleAsync();
+        var productAudit = await _context.ProductLogs.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("Original product", productAudit.Name);
         Assert.Equal(100m, productAudit.Price);
 
-        var profileAudit = await _context.ProductProfileLogs.SingleAsync();
+        var profileAudit = await _context.ProductProfileLogs.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(product.Id, profileAudit.ProductId);
         Assert.Equal("Original description", profileAudit.Description);
 
         var tagAudits = await _context.ProductTagLogs
             .OrderBy(x => x.TagId)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(2, tagAudits.Count);
         Assert.Equal(1, tagAudits[0].TagId);
@@ -155,85 +155,4 @@ public sealed class AuditSaveChangesInterceptorTests : IAsyncLifetime
 
         return new AuditTestDbContext(options);
     }
-}
-
-public sealed class AuditTestDbContext(DbContextOptions<AuditTestDbContext> options) : DbContext(options)
-{
-    public DbSet<Product> Products => Set<Product>();
-    public DbSet<ProductLog> ProductLogs => Set<ProductLog>();
-    public DbSet<ProductProfileLog> ProductProfileLogs => Set<ProductProfileLog>();
-    public DbSet<ProductTagLog> ProductTagLogs => Set<ProductTagLog>();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Product>().ToTable("Products");
-        modelBuilder.Entity<ProductLog>().ToTable("LOG_Products");
-
-        modelBuilder.Entity<Product>().OwnsOne(product => product.Profile, profile =>
-        {
-            profile.ToTable("ProductProfiles");
-            profile.HasKey(value => value.ProductId);
-        });
-
-        modelBuilder.Entity<Product>().OwnsMany(product => product.Tags, tag =>
-        {
-            tag.ToTable("ProductTags");
-            tag.WithOwner().HasForeignKey(value => value.ProductId);
-            tag.HasKey(value => new { value.ProductId, value.TagId });
-        });
-
-        modelBuilder.Entity<ProductProfileLog>(log =>
-        {
-            log.ToTable("LOG_ProductProfiles");
-            log.HasKey(value => value.ProductId);
-        });
-
-        modelBuilder.Entity<ProductTagLog>(log =>
-        {
-            log.ToTable("LOG_ProductTags");
-            log.HasKey(value => new { value.ProductId, value.TagId });
-        });
-    }
-}
-
-public sealed class Product
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public decimal Price { get; set; }
-    public ProductProfile Profile { get; set; } = new();
-    public List<ProductTag> Tags { get; set; } = [];
-}
-
-public sealed class ProductLog
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public decimal Price { get; set; }
-}
-
-public sealed class ProductProfile
-{
-    public int ProductId { get; set; }
-    public string Description { get; set; } = string.Empty;
-}
-
-public sealed class ProductTag
-{
-    public int ProductId { get; set; }
-    public int TagId { get; set; }
-    public string Value { get; set; } = string.Empty;
-}
-
-public sealed class ProductProfileLog
-{
-    public int ProductId { get; set; }
-    public string Description { get; set; } = string.Empty;
-}
-
-public sealed class ProductTagLog
-{
-    public int ProductId { get; set; }
-    public int TagId { get; set; }
-    public string Value { get; set; } = string.Empty;
 }
