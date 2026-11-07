@@ -6,9 +6,9 @@ namespace DbContextWithAudit;
 
 internal sealed record AuditEntry(string AuditTableName, Dictionary<string, object?> ColumnValues);
 
-internal sealed class AuditDataPreparer
+internal static class AuditDataPreparer
 {
-    public List<AuditEntry> Prepare(DbContext context)
+    public static List<AuditEntry> Prepare(DbContext context)
     {
         return [.. context.ChangeTracker.Entries()
             .Where(IsAuditableEntry)
