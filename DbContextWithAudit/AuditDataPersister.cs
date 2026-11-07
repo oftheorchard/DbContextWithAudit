@@ -7,23 +7,16 @@ using System.Data.Common;
 
 namespace DbContextWithAudit;
 
-internal sealed class AuditDataPersister
+internal sealed class AuditDataPersister(
+    int maxRowsPerBatch,
+    int maxParametersPerCommand,
+    ILogger? logger = null)
 {
     private const int SqlServerParameterLimit = 2100;
 
-    private readonly int _maxRowsPerBatch;
-    private readonly int _maxParametersPerCommand;
-    private readonly ILogger _logger;
-
-    public AuditDataPersister(
-        int maxRowsPerBatch,
-        int maxParametersPerCommand,
-        ILogger? logger = null)
-    {
-        _maxRowsPerBatch = Math.Max(1, maxRowsPerBatch);
-        _maxParametersPerCommand = maxParametersPerCommand < 64 ? -1 : maxParametersPerCommand;
-        _logger = logger ?? NullLogger.Instance;
-    }
+    private readonly int _maxRowsPerBatch = Math.Max(1, maxRowsPerBatch);
+    private readonly int _maxParametersPerCommand = maxParametersPerCommand < 64 ? -1 : maxParametersPerCommand;
+    private readonly ILogger _logger = logger ?? NullLogger.Instance;
 
     public async Task PersistAsync(
         DbContext context,
@@ -37,15 +30,15 @@ internal sealed class AuditDataPersister
         var closeAfter = false;
         try
         {
-            closeAfter = await OpenConnectionIfNeededAsync(connection).ConfigureAwait(false);
+            closeAfter = await OpenConnectionIfNeededAsync(connection);
 
             foreach (var group in audits.GroupBy(audit => audit.AuditTableName))
-                await PersistAuditGroupAsync(context, connection, dbTransaction, group).ConfigureAwait(false);
+                await PersistAuditGroupAsync(context, connection, dbTransaction, group);
         }
         finally
         {
             if (closeAfter)
-                await connection.CloseAsync().ConfigureAwait(false);
+                await connection.CloseAsync();
         }
     }
 
@@ -54,7 +47,7 @@ internal sealed class AuditDataPersister
         if (connection.State == System.Data.ConnectionState.Open)
             return false;
 
-        await connection.OpenAsync().ConfigureAwait(false);
+        await connection.OpenAsync();
         return true;
     }
 
@@ -80,7 +73,7 @@ internal sealed class AuditDataPersister
         for (var offset = 0; offset < entries.Count; offset += batchSize)
         {
             var batch = entries.Skip(offset).Take(batchSize).ToList();
-            await ExecuteAuditBatchAsync(connection, dbTransaction, sqlGenerationHelper, group.Key, columnOrder, batch).ConfigureAwait(false);
+            await ExecuteAuditBatchAsync(connection, dbTransaction, sqlGenerationHelper, group.Key, columnOrder, batch);
         }
     }
 
@@ -121,7 +114,7 @@ internal sealed class AuditDataPersister
         ISqlGenerationHelper sqlGenerationHelper,
         string auditTableName,
         IReadOnlyList<string> columnOrder,
-        IReadOnlyList<AuditEntry> batch)
+        List<AuditEntry> batch)
     {
         using var command = connection.CreateCommand();
         command.Transaction = dbTransaction;
@@ -133,7 +126,7 @@ internal sealed class AuditDataPersister
         var tableIdentifier = sqlGenerationHelper.DelimitIdentifier(auditTableName);
         var columns = string.Join(", ", columnOrder.Select(sqlGenerationHelper.DelimitIdentifier));
         command.CommandText = $"INSERT INTO {tableIdentifier} ({columns}) VALUES {string.Join(", ", valueRows)};";
-        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static string CreateParameterRow(

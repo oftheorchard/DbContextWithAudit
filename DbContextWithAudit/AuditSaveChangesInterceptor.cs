@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
@@ -15,60 +14,32 @@ namespace DbContextWithAudit;
 /// </summary>
 public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParametersPerCommand = -1, ILogger<AuditSaveChangesInterceptor>? logger = null) : SaveChangesInterceptor
 {
-    private readonly ConcurrentDictionary<DbContext, List<AuditEntry>> _pending = new();
-    // Tracks transactions we created so we can commit/rollback them after SaveChanges completes
-    private readonly ConcurrentDictionary<DbContext, IDbContextTransaction> _createdTransactions = new();
-    // Maximum number of rows to include in a single batched INSERT statement
     private readonly ILogger<AuditSaveChangesInterceptor> _logger = logger ?? NullLogger<AuditSaveChangesInterceptor>.Instance;
     private readonly AuditDataPersister _auditDataPersister = new(maxRowsPerBatch, maxParametersPerCommand, logger);
+    private readonly AuditTransactionManager _auditTransactionManager = new(logger);
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
         => SavingChangesAsync(eventData, result).AsTask().GetAwaiter().GetResult();
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
         InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
         var context = eventData.Context;
         if (context != null)
         {
             var entries = AuditDataPreparer.Prepare(context);
-            if (entries.Count == 0)
-                return base.SavingChangesAsync(eventData, result, cancellationToken);
-
-            _pending[context] = entries;
-
-            if (context.Database.CurrentTransaction == null && !_createdTransactions.ContainsKey(context))
+            if (entries.Count > 0)
             {
-                var tx = context.Database.BeginTransactionAsync(cancellationToken).GetAwaiter().GetResult();
-                _createdTransactions[context] = tx;
-            }
+                var dbTransaction = await _auditTransactionManager
+                    .EnsureTransactionAsync(context, cancellationToken);
 
-            // persist within the transaction (existing or created)
-            // return PersistPendingAndReturn(eventData, result, cancellationToken);
-            PersistPendingAndReturn(eventData, result, cancellationToken)
-                .ConfigureAwait(false).GetAwaiter().GetResult();
+                _logger.LogDebug("Persisting pending audit entries for context {ContextType} in async saving flow.", context.GetType().Name);
+                if (entries.Count > 0)
+                    await _auditDataPersister.PersistAsync(context, entries, dbTransaction);
+            }
         }
 
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
-    }
-
-    //private async ValueTask<InterceptionResult<int>> PersistPendingAndReturn(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken)
-    private async Task<int> PersistPendingAndReturn(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken)
-    //private async Task PersistPendingAndReturn(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken)
-    {
-        var context = eventData.Context!;
-        DbTransaction? dbTx = null;
-        if (_createdTransactions.TryGetValue(context, out var created))
-            dbTx = created.GetDbTransaction();
-        else if (context.Database.CurrentTransaction != null)
-            dbTx = context.Database.CurrentTransaction.GetDbTransaction();
-
-        _logger.LogDebug("Persisting pending audit entries for context {ContextType} in async saving flow.", context.GetType().Name);
-        if (_pending.TryRemove(context, out var audits) && audits.Count > 0)
-            await _auditDataPersister.PersistAsync(context, audits, dbTx).ConfigureAwait(false);
-
-        return 1;
-         //return await base.SavingChangesAsync(eventData, result, cancellationToken).ConfigureAwait(false);
+        return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
@@ -78,56 +49,28 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
         CancellationToken cancellationToken = default)
     {
         var context = eventData.Context;
-        if (context != null && _createdTransactions.TryRemove(context, out var tx))
-        {
-            try
-            {
-                await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-                _logger.LogDebug("Committed created transaction for DbContext {ContextType} (async).", context.GetType().Name);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error committing created transaction for DbContext {ContextType} (async).", context.GetType().Name);
-                throw;
-            }
-            finally
-            {
-                tx.Dispose();
-            }
-        }
-
         if (context != null)
-            _pending.TryRemove(context, out _);
-
-        return await base.SavedChangesAsync(eventData, result, cancellationToken).ConfigureAwait(false);
+        {
+            await _auditTransactionManager.CommitAsync(context, cancellationToken);
+        }
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData)
         => SaveChangesFailedAsync(eventData).GetAwaiter().GetResult();
 
-    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    public override async Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
     {
-        _logger.LogError(eventData.Exception, "SaveChanges failed for DbContext {ContextType} (async).", eventData.Context?.GetType().Name);
 
-        if (eventData.Context != null)
+        var context = eventData.Context;
+        _logger.LogError(eventData.Exception, "SaveChanges failed for DbContext {ContextType} (async).", context?.GetType().Name);
+
+        if (context != null)
         {
-            _pending.TryRemove(eventData.Context, out _);
-            if (_createdTransactions.TryRemove(eventData.Context, out var tx))
-            {
-                try
-                {
-                    _logger.LogWarning("Rolling back created transaction for DbContext {ContextType} due to SaveChanges failure (async).", eventData.Context.GetType().Name);
-                    tx.Rollback();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error rolling back created transaction for DbContext {ContextType} (async).", eventData.Context.GetType().Name);
-                }
-                finally { tx.Dispose(); }
-            }
+            await _auditTransactionManager.RollbackAsync(context, cancellationToken);
         }
 
-        return base.SaveChangesFailedAsync(eventData, cancellationToken);
+        await base.SaveChangesFailedAsync(eventData, cancellationToken);
     }
 
 }
