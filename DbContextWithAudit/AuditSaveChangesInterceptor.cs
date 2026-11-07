@@ -43,8 +43,10 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
             return base.SavingChanges(eventData, result);
 
         var entries = CollectAuditEntries(context);
-        if (entries.Count > 0)
-            _pending[context] = entries;
+        if (entries.Count == 0)
+            return base.SavingChanges(eventData, result);
+
+        _pending[context] = entries;
         // Ensure the audit inserts will be performed inside the same transaction as SaveChanges.
         // If there's no ambient transaction, create one now and remember to commit it later.
         if (context.Database.CurrentTransaction == null && !_createdTransactions.ContainsKey(context))
@@ -54,7 +56,7 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         }
 
         // Persist audit rows now so they are included in the transaction we just created (or existing one).
-        if (_pending.TryGetValue(context, out var _))
+        if (_pending.ContainsKey(context))
         {
             var dbTx = _createdTransactions.TryGetValue(context, out var created) ? created.GetDbTransaction() : context.Database.CurrentTransaction?.GetDbTransaction();
             try
@@ -75,8 +77,10 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         if (context != null)
         {
             var entries = CollectAuditEntries(context);
-            if (entries.Count > 0)
-                _pending[context] = entries;
+            if (entries.Count == 0)
+                return base.SavingChangesAsync(eventData, result, cancellationToken);
+
+            _pending[context] = entries;
         }
 
         if (context != null)
@@ -87,7 +91,7 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 _createdTransactions[context] = tx;
             }
 
-            if (_pending.TryGetValue(context, out var _))
+            if (_pending.ContainsKey(context))
             {
                 // persist within the transaction (existing or created)
                 return PersistPendingAndReturn(eventData, result, cancellationToken);
@@ -366,14 +370,15 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
                         }
                         catch (Exception ex)
                         {
-                            // log and continue, do not break user changes
-                            try { _logger.LogWarning(ex, "Failed to insert audit batch into {AuditTable}. BatchSize={BatchSize}", group.Key, batch.Count); } catch { }
+                            _logger.LogError(ex, "Failed to insert audit batch into {AuditTable}. BatchSize={BatchSize}. The transaction will be rolled back.", group.Key, batch.Count);
+                            throw;
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    try { _logger.LogWarning(ex, "Failed to process audit group {AuditTable}", group.Key); } catch { }
+                    _logger.LogError(ex, "Failed to process audit group {AuditTable}. The transaction will be rolled back.", group.Key);
+                    throw;
                 }
             }
         }
