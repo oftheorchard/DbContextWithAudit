@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,9 +24,8 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
     // Maximum number of parameters allowed per command; if <= 0 the interceptor will auto-detect per-provider limits
     private readonly int _maxParametersPerCommand = maxParametersPerCommand < 64 ? -1 : maxParametersPerCommand;
     private readonly ILogger<AuditSaveChangesInterceptor> _logger = logger ?? NullLogger<AuditSaveChangesInterceptor>.Instance;
+    private readonly AuditDataPreparer _auditDataPreparer = new();
     private const int SqlServerParameterLimit = 2100;
-
-    private sealed record AuditEntry(string AuditTableName, Dictionary<string, object?> ColumnValues);
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
         => SavingChangesAsync(eventData, result).Result;
@@ -39,7 +36,7 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
         var context = eventData.Context;
         if (context != null)
         {
-            var entries = CollectAuditEntries(context);
+            var entries = _auditDataPreparer.Prepare(context);
             if (entries.Count == 0)
                 return base.SavingChangesAsync(eventData, result, cancellationToken);
 
@@ -158,51 +155,6 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
         }
 
         return base.SaveChangesFailedAsync(eventData, cancellationToken);
-    }
-
-    private static List<AuditEntry> CollectAuditEntries(DbContext context)
-    {
-
-        return [.. context.ChangeTracker.Entries()
-            .Where(IsAuditableEntry)
-            .Select(CreateAuditEntry)
-            .OfType<AuditEntry>()];
-    }
-
-    private static bool IsAuditableEntry(EntityEntry entry) =>
-        entry.State is EntityState.Modified or EntityState.Deleted;
-
-    private static AuditEntry? CreateAuditEntry(EntityEntry entry)
-    {
-        var entityType = entry.Metadata;
-        var tableName = GetTableName(entityType);
-        return string.IsNullOrEmpty(tableName)
-            ? null
-            : new AuditEntry("LOG_" + tableName, GetOriginalColumnValues(entry, tableName));
-    }
-
-    private static Dictionary<string, object?> GetOriginalColumnValues(EntityEntry entry, string tableName)
-    {
-        var storeObject = StoreObjectIdentifier.Table(tableName, entry.Metadata.GetSchema());
-        return entry.Properties
-            .Where(property => property.Metadata.IsPrimaryKey() || !property.Metadata.IsShadowProperty())
-            .ToDictionary(
-                property => GetColumnName(property, storeObject),
-                property => property.OriginalValue);
-    }
-
-    private static string GetColumnName(PropertyEntry property, StoreObjectIdentifier storeObject)
-        => property.Metadata.GetColumnName(storeObject) ?? property.Metadata.Name;
-
-    private static string? GetTableName(IEntityType entityType)
-    {
-        // Prefer the explicit table name from mappings
-        var tableName = entityType.GetTableName();
-        if (!string.IsNullOrEmpty(tableName))
-            return tableName;
-
-        // fallback to the entity type name
-        return entityType.ClrType.Name;
     }
 
     private async Task PersistPendingAudits(DbContext context, DbTransaction? dbTransaction)
