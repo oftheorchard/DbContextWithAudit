@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="DbContextWithAudit.Tests/DbContextWithAudit.Tests.csproj" />
+  <Project Path="DbContextWithAuditOfCurrentData.Tests/DbContextWithAuditOfCurrentData.Tests.csproj" />
   <Project Path="DbContextWithAudit/DbContextWithAudit.csproj" />
+  <Project Path="DbContextWithAuditOfCurrentData/DbContextWithAuditOfCurrentData.csproj" Id="8f5ba5d0-5950-4a7c-9ca5-1bd62d041dfa" />
 </Solution>
