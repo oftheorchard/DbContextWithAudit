@@ -1,9 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Collections.Concurrent;
-using System.Data.Common;
 
 namespace DbContextWithAudit;
 
@@ -34,8 +31,7 @@ public class AuditSaveChangesInterceptor(int maxRowsPerBatch = 500, int maxParam
                     .EnsureTransactionAsync(context, cancellationToken);
 
                 _logger.LogDebug("Persisting pending audit entries for context {ContextType} in async saving flow.", context.GetType().Name);
-                if (entries.Count > 0)
-                    await _auditDataPersister.PersistAsync(context, entries, dbTransaction);
+                await _auditDataPersister.PersistAsync(context, entries, dbTransaction);
             }
         }
 

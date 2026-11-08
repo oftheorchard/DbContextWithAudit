@@ -13,7 +13,7 @@ public sealed class AuditSaveChangesInterceptorSyncTests : IDisposable
     public AuditSaveChangesInterceptorSyncTests()
     {
         _connection.Open();
-        _context = CreateContext();
+        _context = new AuditTestDbContextOptionBuilder(_connection).Build();
         _context.Database.EnsureCreated();
     }
 
@@ -60,7 +60,9 @@ public sealed class AuditSaveChangesInterceptorSyncTests : IDisposable
     [Fact]
     public void Multiple_modified_entities_are_inserted_into_the_audit_table_in_batches()
     {
-        using var context = CreateContext(maxRowsPerBatch: 2);
+        using var context = new AuditTestDbContextOptionBuilder(_connection)
+            .WithMaxRowsPerBatch(2)
+            .Build();
         context.Database.EnsureCreated();
 
         var products = Enumerable.Range(1, 5)
@@ -97,7 +99,7 @@ public sealed class AuditSaveChangesInterceptorSyncTests : IDisposable
 
         Assert.Throws<SqliteException>(() => _context.SaveChanges());
 
-        using var verificationContext = CreateContext();
+        using var verificationContext = new AuditTestDbContextOptionBuilder(_connection).Build();
         var persistedProduct = verificationContext.Products.Single();
         Assert.Equal("Original", persistedProduct.Name);
     }
@@ -146,13 +148,4 @@ public sealed class AuditSaveChangesInterceptorSyncTests : IDisposable
         Assert.Equal("Deleted tag", tagAudits[1].Value);
     }
 
-    private AuditTestDbContext CreateContext(int maxRowsPerBatch = 500)
-    {
-        var options = new DbContextOptionsBuilder<AuditTestDbContext>()
-            .UseSqlite(_connection)
-            .AddInterceptors(new AuditSaveChangesInterceptor(maxRowsPerBatch))
-            .Options;
-
-        return new AuditTestDbContext(options);
-    }
 }

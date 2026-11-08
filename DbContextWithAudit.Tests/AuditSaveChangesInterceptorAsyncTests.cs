@@ -13,7 +13,7 @@ public sealed class AuditSaveChangesInterceptorAsyncTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await _connection.OpenAsync();
-        _context = CreateContext();
+        _context = new AuditTestDbContextOptionBuilder(_connection).Build();
         await _context.Database.EnsureCreatedAsync();
     }
 
@@ -60,7 +60,9 @@ public sealed class AuditSaveChangesInterceptorAsyncTests : IAsyncLifetime
     [Fact]
     public async Task Multiple_modified_entities_are_inserted_into_the_audit_table_in_batches()
     {
-        await using var context = CreateContext(maxRowsPerBatch: 2);
+        await using var context = new AuditTestDbContextOptionBuilder(_connection)
+            .WithMaxRowsPerBatch(2)
+            .Build();
         await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
 
         var products = Enumerable.Range(1, 5)
@@ -97,7 +99,7 @@ public sealed class AuditSaveChangesInterceptorAsyncTests : IAsyncLifetime
 
         await Assert.ThrowsAsync<SqliteException>(() => _context.SaveChangesAsync(TestContext.Current.CancellationToken));
 
-        await using var verificationContext = CreateContext();
+        await using var verificationContext = new AuditTestDbContextOptionBuilder(_connection).Build();
         var persistedProduct = await verificationContext.Products.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("Original", persistedProduct.Name);
     }
@@ -146,13 +148,4 @@ public sealed class AuditSaveChangesInterceptorAsyncTests : IAsyncLifetime
         Assert.Equal("Deleted tag", tagAudits[1].Value);
     }
 
-    private AuditTestDbContext CreateContext(int maxRowsPerBatch = 500)
-    {
-        var options = new DbContextOptionsBuilder<AuditTestDbContext>()
-            .UseSqlite(_connection)
-            .AddInterceptors(new AuditSaveChangesInterceptor(maxRowsPerBatch))
-            .Options;
-
-        return new AuditTestDbContext(options);
-    }
 }

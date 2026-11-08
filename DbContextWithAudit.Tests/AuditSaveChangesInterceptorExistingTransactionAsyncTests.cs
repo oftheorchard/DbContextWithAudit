@@ -15,7 +15,9 @@ public sealed class AuditSaveChangesInterceptorExistingTransactionAsyncTests : I
     public async ValueTask InitializeAsync()
     {
         await _connection.OpenAsync();
-        _context = CreateContext();
+        _context = new AuditTestDbContextOptionBuilder(_connection)
+            .WithMaxRowsPerBatch(2)
+            .Build();
         await _context.Database.EnsureCreatedAsync();
         _transaction = await _context.Database.BeginTransactionAsync();
     }
@@ -110,7 +112,9 @@ public sealed class AuditSaveChangesInterceptorExistingTransactionAsyncTests : I
         await _transaction.DisposeAsync();
         _transaction = null;
 
-        await using var verificationContext = CreateContext();
+        await using var verificationContext = new AuditTestDbContextOptionBuilder(_connection)
+            .WithMaxRowsPerBatch(2)
+            .Build();
         var persistedProduct = await verificationContext.Products.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("Original", persistedProduct.Name);
     }
@@ -157,13 +161,4 @@ public sealed class AuditSaveChangesInterceptorExistingTransactionAsyncTests : I
         Assert.Equal("Deleted tag", tagAudits[1].Value);
     }
 
-    private AuditTestDbContext CreateContext()
-    {
-        var options = new DbContextOptionsBuilder<AuditTestDbContext>()
-            .UseSqlite(_connection)
-            .AddInterceptors(new AuditSaveChangesInterceptor(maxRowsPerBatch: 2))
-            .Options;
-
-        return new AuditTestDbContext(options);
-    }
 }

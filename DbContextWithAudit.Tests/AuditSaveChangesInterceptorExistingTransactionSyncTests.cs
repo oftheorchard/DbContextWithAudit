@@ -15,7 +15,9 @@ public sealed class AuditSaveChangesInterceptorExistingTransactionSyncTests : ID
     public AuditSaveChangesInterceptorExistingTransactionSyncTests()
     {
         _connection.Open();
-        _context = CreateContext();
+        _context = new AuditTestDbContextOptionBuilder(_connection)
+            .WithMaxRowsPerBatch(2)
+            .Build();
         _context.Database.EnsureCreated();
         _transaction = _context.Database.BeginTransaction();
     }
@@ -110,7 +112,9 @@ public sealed class AuditSaveChangesInterceptorExistingTransactionSyncTests : ID
         _transaction.Dispose();
         _transaction = null;
 
-        using var verificationContext = CreateContext();
+        using var verificationContext = new AuditTestDbContextOptionBuilder(_connection)
+            .WithMaxRowsPerBatch(2)
+            .Build();
         var persistedProduct = verificationContext.Products.Single();
         Assert.Equal("Original", persistedProduct.Name);
     }
@@ -155,13 +159,4 @@ public sealed class AuditSaveChangesInterceptorExistingTransactionSyncTests : ID
         Assert.Equal("Deleted tag", tagAudits[1].Value);
     }
 
-    private AuditTestDbContext CreateContext()
-    {
-        var options = new DbContextOptionsBuilder<AuditTestDbContext>()
-            .UseSqlite(_connection)
-            .AddInterceptors(new AuditSaveChangesInterceptor(maxRowsPerBatch: 2))
-            .Options;
-
-        return new AuditTestDbContext(options);
-    }
 }
