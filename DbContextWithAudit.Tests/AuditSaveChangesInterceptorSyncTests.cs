@@ -1,4 +1,3 @@
-using DbContextWithAudit;
 using DbContextWithAudit.Tests.Model;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -82,8 +81,8 @@ public sealed class AuditSaveChangesInterceptorSyncTests : IDisposable
 
         Assert.Equal(5, audits.Count);
         Assert.Equal(
-            new[] { "Original 1", "Original 2", "Original 3", "Original 4", "Original 5" },
-            audits.Select(x => x.Name).ToArray());
+            [ "Original 1", "Original 2", "Original 3", "Original 4", "Original 5" ],
+            [.. audits.Select(x => x.Name)]);
     }
 
     [Fact]
