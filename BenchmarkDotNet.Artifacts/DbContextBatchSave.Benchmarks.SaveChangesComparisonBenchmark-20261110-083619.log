@@ -1,0 +1,274 @@
+// Validating benchmarks:
+// ***** BenchmarkRunner: Start   *****
+// ***** Found 2 benchmark(s) in total *****
+// ***** Building 1 exe(s) in Parallel: Start   *****
+// start dotnet  restore --nodeReuse:false /p:UseSharedCompilation=false /p:Deterministic=true /p:Optimize=true /p:ArtifactsPath="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1/" /p:OutDir="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net10.0/" /p:OutputPath="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net10.0/" /p:PublishDir="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\publish/" in D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1
+// command took 2.06 sec and exited with 0
+// start dotnet  build -c Release --no-restore --nodeReuse:false /p:UseSharedCompilation=false /p:Deterministic=true /p:Optimize=true /p:ArtifactsPath="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1/" /p:OutDir="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net10.0/" /p:OutputPath="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net10.0/" /p:PublishDir="D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\publish/" --output "D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net10.0/" in D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1
+// command took 6.2 sec and exited with 0
+// ***** Done, took 00:00:08 (8.36 sec)   *****
+// Found 2 benchmarks:
+//   SaveChangesComparisonBenchmark.'EF Core SaveChanges': Job-CNUJVU(InvocationCount=1, UnrollFactor=1) [ItemCount=1000000]
+//   SaveChangesComparisonBenchmark.'DbContextBatchSave SaveAddedChanges': Job-CNUJVU(InvocationCount=1, UnrollFactor=1) [ItemCount=1000000]
+
+Setup power plan (GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c FriendlyName: Wysoka wydajność)
+// **************************
+// Benchmark: SaveChangesComparisonBenchmark.'EF Core SaveChanges': Job-CNUJVU(InvocationCount=1, UnrollFactor=1) [ItemCount=1000000]
+// *** Execute ***
+// Launch: 1 / 1
+// Execute: dotnet BenchmarkSuite1-Job-CNUJVU-1.dll --anonymousPipes 664 668 --benchmarkName "DbContextBatchSave.Benchmarks.SaveChangesComparisonBenchmark.StandardSaveChanges(ItemCount: 1000000)" --job "InvocationCount=1, UnrollFactor=1" --benchmarkId 0 in D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net10.0
+// BeforeAnythingElse
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+// GC=Non-concurrent Workstation
+// HardwareIntrinsics=AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-CNUJVU(InvocationCount=1, UnrollFactor=1)
+
+OverheadJitting  1: 1 op, 162800.00 ns, 162.8000 us/op
+WorkloadJitting  1: 1 op, 21041670100.00 ns, 21.0417 s/op
+
+OverheadWarmup   1: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadWarmup   2: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadWarmup   3: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadWarmup   4: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadWarmup   5: 1 op, 1300.00 ns, 1.3000 us/op
+
+OverheadActual   1: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual   2: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual   3: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual   4: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual   5: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual   6: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual   7: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual   8: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual   9: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual  10: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual  11: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual  12: 1 op, 1500.00 ns, 1.5000 us/op
+OverheadActual  13: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual  14: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual  15: 1 op, 1200.00 ns, 1.2000 us/op
+
+WorkloadWarmup   1: 1 op, 19890934700.00 ns, 19.8909 s/op
+WorkloadWarmup   2: 1 op, 20055357400.00 ns, 20.0554 s/op
+WorkloadWarmup   3: 1 op, 19372389700.00 ns, 19.3724 s/op
+WorkloadWarmup   4: 1 op, 19516070400.00 ns, 19.5161 s/op
+WorkloadWarmup   5: 1 op, 19007201300.00 ns, 19.0072 s/op
+WorkloadWarmup   6: 1 op, 19380763000.00 ns, 19.3808 s/op
+
+// BeforeActualRun
+WorkloadActual   1: 1 op, 20249523500.00 ns, 20.2495 s/op
+WorkloadActual   2: 1 op, 20335362200.00 ns, 20.3354 s/op
+WorkloadActual   3: 1 op, 20208968900.00 ns, 20.2090 s/op
+WorkloadActual   4: 1 op, 20419484000.00 ns, 20.4195 s/op
+WorkloadActual   5: 1 op, 20103620900.00 ns, 20.1036 s/op
+WorkloadActual   6: 1 op, 20325829300.00 ns, 20.3258 s/op
+WorkloadActual   7: 1 op, 19900211400.00 ns, 19.9002 s/op
+WorkloadActual   8: 1 op, 20256413600.00 ns, 20.2564 s/op
+WorkloadActual   9: 1 op, 20055767500.00 ns, 20.0558 s/op
+WorkloadActual  10: 1 op, 20278565700.00 ns, 20.2786 s/op
+WorkloadActual  11: 1 op, 19915585100.00 ns, 19.9156 s/op
+WorkloadActual  12: 1 op, 20252591100.00 ns, 20.2526 s/op
+WorkloadActual  13: 1 op, 20045081000.00 ns, 20.0451 s/op
+WorkloadActual  14: 1 op, 20337724000.00 ns, 20.3377 s/op
+WorkloadActual  15: 1 op, 19804604700.00 ns, 19.8046 s/op
+
+// AfterActualRun
+WorkloadResult   1: 1 op, 20249522300.00 ns, 20.2495 s/op
+WorkloadResult   2: 1 op, 20335361000.00 ns, 20.3354 s/op
+WorkloadResult   3: 1 op, 20208967700.00 ns, 20.2090 s/op
+WorkloadResult   4: 1 op, 20419482800.00 ns, 20.4195 s/op
+WorkloadResult   5: 1 op, 20103619700.00 ns, 20.1036 s/op
+WorkloadResult   6: 1 op, 20325828100.00 ns, 20.3258 s/op
+WorkloadResult   7: 1 op, 19900210200.00 ns, 19.9002 s/op
+WorkloadResult   8: 1 op, 20256412400.00 ns, 20.2564 s/op
+WorkloadResult   9: 1 op, 20055766300.00 ns, 20.0558 s/op
+WorkloadResult  10: 1 op, 20278564500.00 ns, 20.2786 s/op
+WorkloadResult  11: 1 op, 19915583900.00 ns, 19.9156 s/op
+WorkloadResult  12: 1 op, 20252589900.00 ns, 20.2526 s/op
+WorkloadResult  13: 1 op, 20045079800.00 ns, 20.0451 s/op
+WorkloadResult  14: 1 op, 20337722800.00 ns, 20.3377 s/op
+WorkloadResult  15: 1 op, 19804603500.00 ns, 19.8046 s/op
+// GC:  114 13 2 6689561408 1
+// Threading:  1 0 1
+
+// AfterAll
+// Benchmark Process 29236 has exited with code 0.
+
+Mean = 20.166 s, StdErr = 0.048 s (0.24%), N = 15, StdDev = 0.185 s
+Min = 19.805 s, Q1 = 20.050 s, Median = 20.250 s, Q3 = 20.302 s, Max = 20.419 s
+IQR = 0.252 s, LowerFence = 19.673 s, UpperFence = 20.680 s
+ConfidenceInterval = [19.968 s; 20.364 s] (CI 99.9%), Margin = 0.198 s (0.98% of Mean)
+Skewness = -0.54, Kurtosis = 1.88, MValue = 2
+
+// ** Remained 1 (50,0%) benchmark(s) to run. Estimated finish 2026-11-10 8:54 (0h 9m from now) **
+Setup power plan (GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c FriendlyName: Wysoka wydajność)
+// **************************
+// Benchmark: SaveChangesComparisonBenchmark.'DbContextBatchSave SaveAddedChanges': Job-CNUJVU(InvocationCount=1, UnrollFactor=1) [ItemCount=1000000]
+// *** Execute ***
+// Launch: 1 / 1
+// Execute: dotnet BenchmarkSuite1-Job-CNUJVU-1.dll --anonymousPipes 1616 1636 --benchmarkName "DbContextBatchSave.Benchmarks.SaveChangesComparisonBenchmark.BatchSaveAddedChanges(ItemCount: 1000000)" --job "InvocationCount=1, UnrollFactor=1" --benchmarkId 1 in D:\Development\DbContextWithAudit\BenchmarkSuite1\bin\Release\net10.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net10.0
+// BeforeAnythingElse
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+// GC=Non-concurrent Workstation
+// HardwareIntrinsics=AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-CNUJVU(InvocationCount=1, UnrollFactor=1)
+
+OverheadJitting  1: 1 op, 167700.00 ns, 167.7000 us/op
+WorkloadJitting  1: 1 op, 21666076900.00 ns, 21.6661 s/op
+
+OverheadWarmup   1: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadWarmup   2: 1 op, 1700.00 ns, 1.7000 us/op
+OverheadWarmup   3: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadWarmup   4: 1 op, 1700.00 ns, 1.7000 us/op
+OverheadWarmup   5: 1 op, 1300.00 ns, 1.3000 us/op
+
+OverheadActual   1: 1 op, 1600.00 ns, 1.6000 us/op
+OverheadActual   2: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadActual   3: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadActual   4: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadActual   5: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadActual   6: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadActual   7: 1 op, 1100.00 ns, 1.1000 us/op
+OverheadActual   8: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual   9: 1 op, 1700.00 ns, 1.7000 us/op
+OverheadActual  10: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadActual  11: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual  12: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual  13: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual  14: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual  15: 1 op, 1400.00 ns, 1.4000 us/op
+OverheadActual  16: 1 op, 1300.00 ns, 1.3000 us/op
+OverheadActual  17: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual  18: 1 op, 1600.00 ns, 1.6000 us/op
+OverheadActual  19: 1 op, 1200.00 ns, 1.2000 us/op
+OverheadActual  20: 1 op, 1300.00 ns, 1.3000 us/op
+
+WorkloadWarmup   1: 1 op, 19546492200.00 ns, 19.5465 s/op
+WorkloadWarmup   2: 1 op, 20835609600.00 ns, 20.8356 s/op
+WorkloadWarmup   3: 1 op, 19852709200.00 ns, 19.8527 s/op
+WorkloadWarmup   4: 1 op, 20384480500.00 ns, 20.3845 s/op
+WorkloadWarmup   5: 1 op, 19766851200.00 ns, 19.7669 s/op
+WorkloadWarmup   6: 1 op, 20526299800.00 ns, 20.5263 s/op
+
+// BeforeActualRun
+WorkloadActual   1: 1 op, 20268218800.00 ns, 20.2682 s/op
+WorkloadActual   2: 1 op, 20098326900.00 ns, 20.0983 s/op
+WorkloadActual   3: 1 op, 20186845500.00 ns, 20.1868 s/op
+WorkloadActual   4: 1 op, 20958875400.00 ns, 20.9589 s/op
+WorkloadActual   5: 1 op, 20450397100.00 ns, 20.4504 s/op
+WorkloadActual   6: 1 op, 20002529700.00 ns, 20.0025 s/op
+WorkloadActual   7: 1 op, 19873644300.00 ns, 19.8736 s/op
+WorkloadActual   8: 1 op, 20635481600.00 ns, 20.6355 s/op
+WorkloadActual   9: 1 op, 20327187700.00 ns, 20.3272 s/op
+WorkloadActual  10: 1 op, 20402205200.00 ns, 20.4022 s/op
+WorkloadActual  11: 1 op, 20332221800.00 ns, 20.3322 s/op
+WorkloadActual  12: 1 op, 20150735500.00 ns, 20.1507 s/op
+WorkloadActual  13: 1 op, 20097104900.00 ns, 20.0971 s/op
+WorkloadActual  14: 1 op, 20150709000.00 ns, 20.1507 s/op
+WorkloadActual  15: 1 op, 20396500500.00 ns, 20.3965 s/op
+
+// AfterActualRun
+WorkloadResult   1: 1 op, 20268217450.00 ns, 20.2682 s/op
+WorkloadResult   2: 1 op, 20098325550.00 ns, 20.0983 s/op
+WorkloadResult   3: 1 op, 20186844150.00 ns, 20.1868 s/op
+WorkloadResult   4: 1 op, 20450395750.00 ns, 20.4504 s/op
+WorkloadResult   5: 1 op, 20002528350.00 ns, 20.0025 s/op
+WorkloadResult   6: 1 op, 19873642950.00 ns, 19.8736 s/op
+WorkloadResult   7: 1 op, 20635480250.00 ns, 20.6355 s/op
+WorkloadResult   8: 1 op, 20327186350.00 ns, 20.3272 s/op
+WorkloadResult   9: 1 op, 20402203850.00 ns, 20.4022 s/op
+WorkloadResult  10: 1 op, 20332220450.00 ns, 20.3322 s/op
+WorkloadResult  11: 1 op, 20150734150.00 ns, 20.1507 s/op
+WorkloadResult  12: 1 op, 20097103550.00 ns, 20.0971 s/op
+WorkloadResult  13: 1 op, 20150707650.00 ns, 20.1507 s/op
+WorkloadResult  14: 1 op, 20396499150.00 ns, 20.3965 s/op
+// GC:  273 11 1 7657561448 1
+// Threading:  1 0 1
+
+// AfterAll
+// Benchmark Process 1940 has exited with code 0.
+
+Mean = 20.241 s, StdErr = 0.053 s (0.26%), N = 14, StdDev = 0.200 s
+Min = 19.874 s, Q1 = 20.111 s, Median = 20.228 s, Q3 = 20.380 s, Max = 20.635 s
+IQR = 0.269 s, LowerFence = 19.708 s, UpperFence = 20.784 s
+ConfidenceInterval = [20.016 s; 20.466 s] (CI 99.9%), Margin = 0.225 s (1.11% of Mean)
+Skewness = 0.09, Kurtosis = 2.25, MValue = 2
+
+// ** Remained 0 (0,0%) benchmark(s) to run. Estimated finish 2026-11-10 8:54 (0h 0m from now) **
+Successfully reverted power plan (GUID: 381b4222-f694-41f0-9685-ff5bb260df2e FriendlyName: Zrównoważony)
+// ***** BenchmarkRunner: Finish  *****
+
+// * Export *
+  BenchmarkDotNet.Artifacts\results\DbContextBatchSave.Benchmarks.SaveChangesComparisonBenchmark-report.csv
+  BenchmarkDotNet.Artifacts\results\DbContextBatchSave.Benchmarks.SaveChangesComparisonBenchmark-report-github.md
+  BenchmarkDotNet.Artifacts\results\DbContextBatchSave.Benchmarks.SaveChangesComparisonBenchmark-report.html
+
+// * Detailed results *
+SaveChangesComparisonBenchmark.'EF Core SaveChanges': Job-CNUJVU(InvocationCount=1, UnrollFactor=1) [ItemCount=1000000]
+Runtime = .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4; GC = Non-concurrent Workstation
+Mean = 20.166 s, StdErr = 0.048 s (0.24%), N = 15, StdDev = 0.185 s
+Min = 19.805 s, Q1 = 20.050 s, Median = 20.250 s, Q3 = 20.302 s, Max = 20.419 s
+IQR = 0.252 s, LowerFence = 19.673 s, UpperFence = 20.680 s
+ConfidenceInterval = [19.968 s; 20.364 s] (CI 99.9%), Margin = 0.198 s (0.98% of Mean)
+Skewness = -0.54, Kurtosis = 1.88, MValue = 2
+-------------------- Histogram --------------------
+[19.706 s ; 20.476 s) | @@@@@@@@@@@@@@@
+---------------------------------------------------
+
+SaveChangesComparisonBenchmark.'DbContextBatchSave SaveAddedChanges': Job-CNUJVU(InvocationCount=1, UnrollFactor=1) [ItemCount=1000000]
+Runtime = .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4; GC = Non-concurrent Workstation
+Mean = 20.241 s, StdErr = 0.053 s (0.26%), N = 14, StdDev = 0.200 s
+Min = 19.874 s, Q1 = 20.111 s, Median = 20.228 s, Q3 = 20.380 s, Max = 20.635 s
+IQR = 0.269 s, LowerFence = 19.708 s, UpperFence = 20.784 s
+ConfidenceInterval = [20.016 s; 20.466 s] (CI 99.9%), Margin = 0.225 s (1.11% of Mean)
+Skewness = 0.09, Kurtosis = 2.25, MValue = 2
+-------------------- Histogram --------------------
+[19.765 s ; 20.744 s) | @@@@@@@@@@@@@@
+---------------------------------------------------
+
+// * Summary *
+
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26300.9818)
+11th Gen Intel Core i5-11400H 2.70GHz (Max: 2.69GHz), 1 CPU, 12 logical and 6 physical cores
+.NET SDK 10.0.403
+  [Host]     : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+  Job-CNUJVU : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+
+InvocationCount=1  UnrollFactor=1  
+
+| Method                                | ItemCount | Mean    | Error   | StdDev  | Ratio | Alloc Ratio |
+|-------------------------------------- |---------- |--------:|--------:|--------:|------:|------------:|
+| 'EF Core SaveChanges'                 | 1000000   | 20.17 s | 0.198 s | 0.185 s |  1.00 |          NA |
+| 'DbContextBatchSave SaveAddedChanges' | 1000000   | 20.24 s | 0.225 s | 0.200 s |  1.00 |          NA |
+
+// * Hints *
+Outliers
+  SaveChangesComparisonBenchmark.'DbContextBatchSave SaveAddedChanges': InvocationCount=1, UnrollFactor=1 -> 1 outlier  was  removed (20.96 s)
+
+// * Legends *
+  ItemCount   : Value of the 'ItemCount' parameter
+  Mean        : Arithmetic mean of all measurements
+  Error       : Half of 99.9% confidence interval
+  StdDev      : Standard deviation of all measurements
+  Ratio       : Mean of the ratio distribution ([Current]/[Baseline])
+  Alloc Ratio : Allocated memory ratio distribution ([Current]/[Baseline])
+  1 s         : 1 Second (1 sec)
+
+// * Diagnostic Output - CPUUsageDiagnoser *
+Saving diagsession as a directory. This may take a moment...
+Exported diagsession file: D:\Development\DbContextWithAudit\BenchmarkDotNet.Artifacts\BenchmarkDotNet_SaveChangesComparisonBenchmark_20261110_085451.
+Opening diagsession in VisualStudio: 21788
+
+
+// ***** BenchmarkRunner: End *****
+Run time: 00:18:20 (1100.59 sec), executed benchmarks: 2
+
+Global total time: 00:18:47 (1127.17 sec), executed benchmarks: 2
+// * Artifacts cleanup *
+Artifacts cleanup is finished

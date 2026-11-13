@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="DbContextBatchSave.Tests/DbContextBatchSave.Tests.csproj" />
+  <Project Path="DbContextBatchSave/DbContextBatchSave.csproj" />
   <Project Path="DbContextWithAudit.Tests/DbContextWithAudit.Tests.csproj" />
   <Project Path="DbContextWithAuditOfCurrentData.Tests/DbContextWithAuditOfCurrentData.Tests.csproj" />
   <Project Path="DbContextWithAudit/DbContextWithAudit.csproj" />
